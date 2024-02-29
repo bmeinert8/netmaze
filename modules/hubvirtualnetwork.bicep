@@ -454,6 +454,7 @@ resource hubWebServerVM2 'Microsoft.Compute/virtualMachines@2023-03-01' = {
 }
 
 output hubVirtualNetworkId string = hubVirtualNetwork.id
+
 output deployedNSGs array = [for (name, i) in NsgNames: {
   orgName: name
   nsgName: NsgNames[i].name
