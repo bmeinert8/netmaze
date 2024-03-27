@@ -1,0 +1,192 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "workflows_AutoOnBoarder_name": {
+            "defaultValue": "AutoOnBoarder",
+            "type": "String"
+        },
+        "connections_azuread_externalid": {
+            "defaultValue": "/subscriptions/db727eda-5f15-499f-b5ee-1f1d46d99f23/resourceGroups/AutomatedOnBoarder/providers/Microsoft.Web/connections/azuread",
+            "type": "String"
+        },
+        "connections_keyvault_2_externalid": {
+            "defaultValue": "/subscriptions/db727eda-5f15-499f-b5ee-1f1d46d99f23/resourceGroups/AutomatedOnBoarder/providers/Microsoft.Web/connections/keyvault-2",
+            "type": "String"
+        },
+        "connections_outlook_externalid": {
+            "defaultValue": "/subscriptions/db727eda-5f15-499f-b5ee-1f1d46d99f23/resourceGroups/AutomatedOnBoarder/providers/Microsoft.Web/connections/outlook",
+            "type": "String"
+        }
+    },
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2017-07-01",
+            "name": "[parameters('workflows_AutoOnBoarder_name')]",
+            "location": "eastus2",
+            "identity": {
+                "type": "SystemAssigned"
+            },
+            "properties": {
+                "state": "Suspended",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        }
+                    },
+                    "triggers": {
+                        "manual": {
+                            "type": "Request",
+                            "kind": "Http",
+                            "inputs": {
+                                "schema": {
+                                    "$schema": "http://json-schema.org/draft-04/schema#",
+                                    "properties": {
+                                        "department": {
+                                            "type": "string"
+                                        },
+                                        "firstname": {
+                                            "type": "string"
+                                        },
+                                        "jobtitle": {
+                                            "type": "string"
+                                        },
+                                        "lastname": {
+                                            "type": "string"
+                                        },
+                                        "phonenumber": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "firstname",
+                                        "lastname",
+                                        "department",
+                                        "jobtitle",
+                                        "phonenumber"
+                                    ],
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "actions": {
+                        "Add_user_to_group": {
+                            "runAfter": {
+                                "Create_user": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "body": {
+                                    "@@odata.id": "@body('Create_user')?['id']"
+                                },
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuread']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "path": "/v1.0/groups/@{encodeURIComponent('8ff55fbc-a525-40b5-ac3b-f4156106a187')}/members/$ref"
+                            }
+                        },
+                        "Create_user": {
+                            "runAfter": {
+                                "Get_secret": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "body": {
+                                    "accountEnabled": false,
+                                    "department": "@triggerBody()['department']",
+                                    "displayName": "@{concat(triggerBody()['firstname'], ' ', triggerBody()['lastname'])}",
+                                    "jobTitle": "@triggerBody()['jobtitle']",
+                                    "mailNickname": "@triggerBody()['firstname']",
+                                    "mobilePhone": "@triggerBody()['phonenumber']",
+                                    "passwordProfile": {
+                                        "password": "@body('Get_secret')?['value']"
+                                    },
+                                    "userPrincipalName": "@{concat(triggerBody()['firstname'], '.', triggerBody()['lastname'], '@', 'brianmeinert1gmail.onmicrosoft.com')}"
+                                },
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuread']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "path": "/v1.0/users"
+                            }
+                        },
+                        "Get_secret": {
+                            "runAfter": {},
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['keyvault']['connectionId']"
+                                    }
+                                },
+                                "method": "get",
+                                "path": "/secrets/@{encodeURIComponent('newuserpw')}/value"
+                            }
+                        },
+                        "Send_an_email_(V2)": {
+                            "runAfter": {
+                                "Add_user_to_group": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "body": {
+                                    "Body": "<p>@{body('Create_user')?['displayName']} has been created. Please review the accont, grant any other premissions needed, and enable the account.&nbsp;</p>",
+                                    "Importance": "Normal",
+                                    "Subject": "New User:",
+                                    "To": "brian.meinert1@gmail.com"
+                                },
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['outlook']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "path": "/v2/Mail"
+                            }
+                        }
+                    },
+                    "outputs": {}
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "azuread": {
+                                "connectionId": "[parameters('connections_azuread_externalid')]",
+                                "connectionName": "azuread",
+                                "id": "/subscriptions/db727eda-5f15-499f-b5ee-1f1d46d99f23/providers/Microsoft.Web/locations/eastus2/managedApis/azuread"
+                            },
+                            "keyvault": {
+                                "connectionId": "[parameters('connections_keyvault_2_externalid')]",
+                                "connectionName": "keyvault-2",
+                                "id": "/subscriptions/db727eda-5f15-499f-b5ee-1f1d46d99f23/providers/Microsoft.Web/locations/eastus2/managedApis/keyvault"
+                            },
+                            "outlook": {
+                                "connectionId": "[parameters('connections_outlook_externalid')]",
+                                "connectionName": "outlook",
+                                "id": "/subscriptions/db727eda-5f15-499f-b5ee-1f1d46d99f23/providers/Microsoft.Web/locations/eastus2/managedApis/outlook"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}

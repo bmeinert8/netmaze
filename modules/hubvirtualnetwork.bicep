@@ -1,3 +1,4 @@
+
 @description('The location of where the resources are deployed.')
 param location string
 

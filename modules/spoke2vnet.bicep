@@ -169,3 +169,5 @@ resource spoke2VirtualNetwork 'Microsoft.Network/virtualNetworks@2021-02-01' = {
 
 
 output spoke2VMId string = spoke2VM.id
+output spoke2VMName string = spoke2VM.name
+output spoke2VMReference string = spoke2VM.properties.hardwareProfile.vmSize
